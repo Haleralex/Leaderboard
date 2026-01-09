@@ -1,0 +1,48 @@
+# Binaries (compiled executables)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build directories
+bin/
+dist/
+
+# Test binaries
+*.test
+
+# Output files
+*.out
+
+# Temporary/Test files
+nul
+test_*.html
+test_*.ps1
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor
+vendor/
+
+# Coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# Documentation (except README)
+*.md
+!README.md

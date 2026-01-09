@@ -1,0 +1,141 @@
+### Leaderboard Service API Collection
+### Use with VS Code REST Client extension or similar tools
+
+@baseUrl = http://localhost:8080/api/v1
+@token =
+
+### Health Check
+GET http://localhost:8080/health
+
+### Liveness Probe
+GET http://localhost:8080/live
+
+### Readiness Probe
+GET http://localhost:8080/ready
+
+#######################
+# Authentication
+#######################
+
+### Register User
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "TestPlayer",
+  "email": "testplayer@example.com",
+  "password": "securepassword123"
+}
+
+### Login (Save the token for subsequent requests)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "testplayer@example.com",
+  "password": "securepassword123"
+}
+
+# Copy the token from the response above and set it in @token variable
+
+#######################
+# Leaderboard (Authenticated)
+#######################
+
+### Submit Score
+POST {{baseUrl}}/submit-score
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "score": 1500,
+  "season": "global",
+  "metadata": {
+    "level": "15",
+    "time_played": "7200",
+    "powerups_used": "3"
+  }
+}
+
+### Submit Score - Season 2024_01
+POST {{baseUrl}}/submit-score
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "score": 2000,
+  "season": "2024_01"
+}
+
+### Get Global Leaderboard (Default - Top 50)
+GET {{baseUrl}}/leaderboard
+Authorization: Bearer {{token}}
+
+### Get Global Leaderboard (Custom Pagination)
+GET {{baseUrl}}/leaderboard?season=global&limit=10&page=0&sort=desc
+Authorization: Bearer {{token}}
+
+### Get Leaderboard - Ascending Order
+GET {{baseUrl}}/leaderboard?season=global&limit=20&sort=asc
+Authorization: Bearer {{token}}
+
+### Get Leaderboard - Page 2
+GET {{baseUrl}}/leaderboard?season=global&limit=50&page=1
+Authorization: Bearer {{token}}
+
+### Get Leaderboard - Specific Season
+GET {{baseUrl}}/leaderboard?season=2024_01&limit=25
+Authorization: Bearer {{token}}
+
+### Get User Rank (Replace {userId} with actual UUID from login response)
+GET {{baseUrl}}/leaderboard/user/550e8400-e29b-41d4-a716-446655440000?season=global
+Authorization: Bearer {{token}}
+
+#######################
+# Error Cases
+#######################
+
+### Submit Score - Missing Token (401 Unauthorized)
+POST {{baseUrl}}/submit-score
+Content-Type: application/json
+
+{
+  "score": 1000
+}
+
+### Submit Score - Invalid Score (400 Bad Request)
+POST {{baseUrl}}/submit-score
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "score": -100
+}
+
+### Login - Invalid Credentials (401 Unauthorized)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "wrong@example.com",
+  "password": "wrongpassword"
+}
+
+### Get User Rank - Invalid UUID (400 Bad Request)
+GET {{baseUrl}}/leaderboard/user/invalid-uuid
+Authorization: Bearer {{token}}
+
+#######################
+# Rate Limiting Test
+#######################
+
+### Submit Multiple Requests (Test Rate Limiting)
+# Run this multiple times quickly to trigger rate limit
+POST {{baseUrl}}/submit-score
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "score": 500,
+  "season": "test"
+}
