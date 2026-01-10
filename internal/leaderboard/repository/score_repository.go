@@ -72,10 +72,9 @@ func (r *PostgresScoreRepository) FindByUserAndSeason(ctx context.Context, userI
 
 // GetLeaderboard retrieves paginated leaderboard entries for a season with user details
 func (r *PostgresScoreRepository) GetLeaderboard(ctx context.Context, season string, limit, offset int, sortOrder string) ([]models.LeaderboardEntry, int64, error) {
-	orderBy := "scores.score DESC"
-	if sortOrder == "asc" {
-		orderBy = "score ASC"
-	}
+	// Always sort by rank ASC (lower rank = better position)
+	// sortOrder parameter kept for backward compatibility but ignored
+	orderBy := "rank ASC"
 
 	var entries []models.LeaderboardEntry
 	err := r.db.DB.WithContext(ctx).Raw(`

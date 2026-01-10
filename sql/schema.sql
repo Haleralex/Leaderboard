@@ -39,7 +39,7 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 -- View for leaderboard with user info
 CREATE OR REPLACE VIEW leaderboard_view AS
 SELECT
-    ROW_NUMBER() OVER (PARTITION BY s.season ORDER BY s.score DESC) as rank,
+    DENSE_RANK() OVER (PARTITION BY s.season ORDER BY s.score DESC, s.timestamp ASC) as rank,
     s.id,
     s.user_id,
     u.name as user_name,
@@ -48,7 +48,7 @@ SELECT
     s.timestamp
 FROM scores s
 JOIN users u ON s.user_id = u.id
-ORDER BY s.season, s.score DESC;
+ORDER BY s.season, s.score DESC, s.timestamp ASC;
 
 COMMENT ON TABLE users IS 'Game players with authentication';
 COMMENT ON TABLE scores IS 'Player scores with seasonal support and metadata';

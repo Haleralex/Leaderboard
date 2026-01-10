@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,16 +42,20 @@ type Client struct {
 
 	// Season this client is subscribed to
 	Season string
+
+	// Requested limit - how many entries client wants (updated dynamically)
+	RequestedLimit int
 }
 
 // NewClient creates a new WebSocket client
 func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, season string) *Client {
 	return &Client{
-		Hub:    hub,
-		Conn:   conn,
-		Send:   make(chan []byte, sendBufferSize),
-		UserID: userID,
-		Season: season,
+		Hub:            hub,
+		Conn:           conn,
+		Send:           make(chan []byte, sendBufferSize),
+		UserID:         userID,
+		Season:         season,
+		RequestedLimit: 50, // Default to TOP-50
 	}
 }
 
@@ -78,11 +83,19 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		// We don't expect messages from clients (read-only for now)
-		log.Debug().
-			Str("user_id", c.UserID.String()).
-			Str("message", string(message)).
-			Msg("Received message from client (ignoring)")
+		// Parse client messages
+		var msg map[string]interface{}
+		if err := json.Unmarshal(message, &msg); err == nil {
+			if msgType, ok := msg["type"].(string); ok && msgType == "update_limit" {
+				if limit, ok := msg["limit"].(float64); ok {
+					c.RequestedLimit = int(limit)
+					log.Info().
+						Str("user_id", c.UserID.String()).
+						Int("new_limit", c.RequestedLimit).
+						Msg("📊 Client updated requested limit")
+				}
+			}
+		}
 	}
 }
 

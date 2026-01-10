@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
-	sharedmodels "leaderboard-service/internal/shared/models"
 	sharedhandlers "leaderboard-service/internal/shared/handlers"
 	"leaderboard-service/internal/shared/middleware"
+	sharedmodels "leaderboard-service/internal/shared/models"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -131,7 +131,7 @@ func parseLeaderboardQuery(r *http.Request) *leaderboardmodels.LeaderboardQuery 
 
 	// Parse limit
 	if limitStr := params.Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100000 {
 			limit = l
 		}
 	}

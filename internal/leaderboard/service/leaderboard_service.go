@@ -354,16 +354,24 @@ func (s *LeaderboardService) GetUserRank(ctx context.Context, userID uuid.UUID, 
 
 // broadcastLeaderboardUpdate fetches and broadcasts the current leaderboard
 func (s *LeaderboardService) broadcastLeaderboardUpdate(ctx context.Context, season string) {
-	log.Info().Str("season", season).Msg("🔔 broadcastLeaderboardUpdate called")
+	s.broadcastLeaderboardUpdateWithLimit(ctx, season, 10000)
+}
+
+// broadcastLeaderboardUpdateWithLimit fetches and broadcasts the current leaderboard with custom limit
+func (s *LeaderboardService) broadcastLeaderboardUpdateWithLimit(ctx context.Context, season string, limit int) {
+	log.Info().
+		Str("season", season).
+		Int("limit", limit).
+		Msg("🔔 broadcastLeaderboardUpdateWithLimit called")
 
 	if s.hub == nil {
-		log.Error().Msg("❌ Hub is nil in broadcastLeaderboardUpdate!")
+		log.Error().Msg("❌ Hub is nil in broadcastLeaderboardUpdateWithLimit!")
 		return
 	}
 
 	query := &models.LeaderboardQuery{
 		Season:    season,
-		Limit:     10,
+		Limit:     limit, // Use dynamic limit from clients
 		Page:      0,
 		SortOrder: "desc",
 	}
@@ -377,29 +385,36 @@ func (s *LeaderboardService) broadcastLeaderboardUpdate(ctx context.Context, sea
 	log.Info().
 		Str("season", season).
 		Int("entries", len(leaderboard.Entries)).
+		Int("limit", limit).
 		Msg("📡 Broadcasting leaderboard to WebSocket Hub...")
 
 	s.hub.Broadcast(season, leaderboard)
 
-	log.Info().Str("season", season).Msg("✅ Broadcast sent to Hub")
+	log.Info().
+		Str("season", season).
+		Int("limit", limit).
+		Msg("✅ Broadcast sent to Hub")
 }
 
-// handlePeriodicUpdates broadcasts leaderboard to all active seasons
-func (s *LeaderboardService) handlePeriodicUpdates(seasons []string) {
+// handlePeriodicUpdates broadcasts leaderboard with dynamic limits per season
+func (s *LeaderboardService) handlePeriodicUpdates(seasonLimits map[string]int) {
 	log.Info().
-		Int("season_count", len(seasons)).
-		Strs("seasons", seasons).
-		Msg("🔔🔔🔔 handlePeriodicUpdates CALLED - about to broadcast")
+		Int("season_count", len(seasonLimits)).
+		Interface("season_limits", seasonLimits).
+		Msg("🔔🔔🔔 handlePeriodicUpdates CALLED - about to broadcast with dynamic limits")
 
 	// Use background context - periodic updates are not critical
-	for _, season := range seasons {
-		log.Info().Str("season", season).Msg("🚀 Launching broadcast goroutine for season")
+	for season, limit := range seasonLimits {
+		log.Info().
+			Str("season", season).
+			Int("limit", limit).
+			Msg("🚀 Launching broadcast goroutine for season with dynamic limit")
 		// Create separate context for each goroutine
-		go func(seasonName string) {
+		go func(seasonName string, requestedLimit int) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			s.broadcastLeaderboardUpdate(ctx, seasonName)
-		}(season)
+			s.broadcastLeaderboardUpdateWithLimit(ctx, seasonName, requestedLimit)
+		}(season, limit)
 	}
 
 	log.Info().Msg("🔔 handlePeriodicUpdates FINISHED - all goroutines launched")
@@ -409,14 +424,22 @@ func (s *LeaderboardService) handlePeriodicUpdates(seasons []string) {
 func (s *LeaderboardService) SendInitialSnapshot(season string, clientSend chan []byte) {
 	log.Info().Str("season", season).Msg("📸 Sending initial snapshot to new client")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// FORCE full leaderboard fetch from DB, bypassing Redis cache with limit=50
 	query := &models.LeaderboardQuery{
 		Season:    season,
-		Limit:     50, // Send more data for initial load
+		Limit:     10000, // Send ALL entries for initial load
 		Page:      0,
 		SortOrder: "desc",
+	}
+
+	// Clear Redis cache for this season to force DB fetch
+	if s.redis != nil {
+		key := redisLeaderboardPrefix + season
+		s.redis.Client.Del(ctx, key)
+		log.Info().Str("season", season).Msg("🗑️ Cleared Redis cache for initial snapshot")
 	}
 
 	leaderboard, err := s.GetLeaderboard(ctx, query)
@@ -460,7 +483,7 @@ func (s *LeaderboardService) BroadcastLeaderboard(ctx context.Context, season st
 
 	query := &models.LeaderboardQuery{
 		Season:    season,
-		Limit:     50,
+		Limit:     10000,
 		Page:      0,
 		SortOrder: "desc",
 	}

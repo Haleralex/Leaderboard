@@ -7,6 +7,7 @@ import (
 	"time"
 
 	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
+
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,8 +31,8 @@ type Hub struct {
 	// Context for graceful shutdown
 	ctx context.Context
 
-	// Callback for periodic updates (called every N seconds)
-	OnPeriodicUpdate func(seasons []string)
+	// Callback for periodic updates (called every N seconds with max requested limit per season)
+	OnPeriodicUpdate func(seasonLimits map[string]int)
 }
 
 // BroadcastMessage contains the season and leaderboard data to broadcast
@@ -235,37 +236,46 @@ func (h *Hub) logStats() {
 	}
 }
 
-// triggerPeriodicUpdates calls callback for each active season
+// triggerPeriodicUpdates calls callback with max requested limit per season
 func (h *Hub) triggerPeriodicUpdates() {
 	h.mu.RLock()
-	activeSeasons := make([]string, 0, len(h.Clients))
+	seasonLimits := make(map[string]int)
 	totalClients := 0
+
+	// Find max requested limit per season
 	for season, clients := range h.Clients {
 		if len(clients) > 0 {
-			activeSeasons = append(activeSeasons, season)
+			maxLimit := 50 // Default
+			for client := range clients {
+				if client.RequestedLimit > maxLimit {
+					maxLimit = client.RequestedLimit
+				}
+			}
+			seasonLimits[season] = maxLimit
 			totalClients += len(clients)
 		}
 	}
 	h.mu.RUnlock()
 
 	log.Info().
-		Int("active_seasons", len(activeSeasons)).
+		Int("active_seasons", len(seasonLimits)).
 		Int("total_clients", totalClients).
+		Interface("season_limits", seasonLimits).
 		Bool("callback_set", h.OnPeriodicUpdate != nil).
 		Msg("🔄🔄🔄 triggerPeriodicUpdates CALLED")
 
 	// Call callback if set
-	if h.OnPeriodicUpdate != nil && len(activeSeasons) > 0 {
+	if h.OnPeriodicUpdate != nil && len(seasonLimits) > 0 {
 		log.Info().
-			Int("seasons", len(activeSeasons)).
-			Strs("season_list", activeSeasons).
-			Msg("✅ Calling OnPeriodicUpdate callback")
-		h.OnPeriodicUpdate(activeSeasons)
+			Int("seasons", len(seasonLimits)).
+			Interface("limits", seasonLimits).
+			Msg("✅ Calling OnPeriodicUpdate callback with dynamic limits")
+		h.OnPeriodicUpdate(seasonLimits)
 	} else {
 		if h.OnPeriodicUpdate == nil {
 			log.Error().Msg("❌❌❌ OnPeriodicUpdate callback is NIL - NO UPDATES WILL BE SENT!")
 		}
-		if len(activeSeasons) == 0 {
+		if len(seasonLimits) == 0 {
 			log.Warn().Msg("⚠️ No active seasons with clients")
 		}
 	}
