@@ -21,7 +21,7 @@ A production-ready, high-performance leaderboard microservice built with Go. Fea
 ```
 ┌─────────────┐      ┌──────────────┐      ┌──────────────┐
 │   Unity     │─────▶│ Leaderboard  │─────▶│  PostgreSQL  │
-│   Client    │      │   Service    │      │  (Supabase)  │
+│   Client    │      │   Service    │      │              │
 └─────────────┘      │   (Go/Chi)   │      └──────────────┘
                      │              │
                      │              │─────▶│    Redis     │
@@ -33,7 +33,7 @@ A production-ready, high-performance leaderboard microservice built with Go. Fea
 
 - **Language**: Go 1.25+
 - **Router**: Chi v5
-- **Database**: PostgreSQL (Supabase) with GORM
+- **Database**: PostgreSQL with GORM
 - **Cache**: Redis v7 with go-redis/v9
 - **Auth**: JWT (golang-jwt/jwt/v5)
 - **Logging**: Zerolog
@@ -58,7 +58,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) and [CLEAN_ARCHITECTURE_5_5.md](CLEAN_ARC
 ### Prerequisites
 
 - Go 1.25+
-- PostgreSQL (or Supabase account)
+- PostgreSQL
 - Redis
 - Docker (optional)
 
@@ -80,9 +80,6 @@ cp .env.example .env
 Apply the schema to your PostgreSQL database:
 
 ```bash
-# Using Supabase SQL Editor: paste contents of sql/schema.sql
-
-# Or using psql:
 psql $DATABASE_URL < sql/schema.sql
 ```
 
@@ -505,58 +502,6 @@ jobs:
         docker push leaderboard-service:${{ github.sha }}
 ```
 
-## 🌟 Extensions & Future Features
-
-### 1. Advanced Anti-Cheat
-
-Implement score validation and anomaly detection:
-
-- Score velocity checks (limit score increases per time window)
-- Pattern recognition for suspicious behavior
-- Statistical outlier detection
-
-### 2. Seasonal Rotation
-
-Auto-rotate seasons with cron jobs:
-
-```go
-// Create new season weekly/monthly
-func (s *Service) RotateSeason() {
-    newSeason := fmt.Sprintf("season_%s", time.Now().Format("2006_01"))
-    // Archive old season, create new
-}
-```
-
-### 3. Analytics Dashboard
-
-Track metrics with Prometheus/Grafana:
-
-- Score submission rates
-- API response times
-- Cache hit/miss ratios
-- User activity patterns
-
-### 4. OAuth2 Integration
-
-Add Supabase OAuth2 support:
-
-```go
-// internal/middleware/oauth2.go
-import "golang.org/x/oauth2"
-
-func SupabaseOAuth2() {
-    oauth2Config := &oauth2.Config{
-        ClientID:     os.Getenv("SUPABASE_CLIENT_ID"),
-        ClientSecret: os.Getenv("SUPABASE_CLIENT_SECRET"),
-        Endpoint: oauth2.Endpoint{
-            AuthURL:  "https://your-project.supabase.co/auth/v1/authorize",
-            TokenURL: "https://your-project.supabase.co/auth/v1/token",
-        },
-    }
-    // Implement OAuth2 flow
-}
-```
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -578,7 +523,6 @@ Built with ❤️ by Haler
 ## 🙏 Acknowledgments
 
 - Chi router for the excellent HTTP framework
-- Supabase for managed PostgreSQL
 - Redis for blazing-fast caching
 - The Go community for amazing libraries
 
