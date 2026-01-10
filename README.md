@@ -1,16 +1,19 @@
 # 🎮 Leaderboard Microservice
 
-A production-ready, scalable leaderboard microservice built with Go for game applications. Features JWT authentication, Redis caching, PostgreSQL persistence, and comprehensive API endpoints for score submission and leaderboard queries.
+A production-ready, high-performance leaderboard microservice built with Go. Features JWT authentication, Redis caching, PostgreSQL persistence, real-time WebSocket updates, and implements Clean Architecture with proven design patterns.
 
 ## 📋 Features
 
 - **Score Management**: Submit and update player scores with anti-cheat rate limiting
+- **Real-time Updates**: WebSocket support for live leaderboard updates
 - **Leaderboard Queries**: Paginated, sorted leaderboards with multiple filtering options
 - **Seasonal Support**: Multiple leaderboard seasons (e.g., global, weekly, monthly)
 - **High Performance**: Redis caching with PostgreSQL fallback for optimal speed
 - **Authentication**: JWT-based authentication middleware
 - **Rate Limiting**: Per-IP rate limiting to prevent abuse
-- **Health Checks**: Kubernetes-ready health, readiness, and liveness endpoints
+- **Health Checks**: Health, readiness, and liveness endpoints
+- **Clean Architecture**: Domain-driven design with separation of concerns
+- **Design Patterns**: Repository, Specification, Decorator, Strategy, Factory, Unit of Work
 - **Production-Ready**: Structured logging, graceful shutdown, CORS support
 
 ## 🏗️ Architecture
@@ -36,6 +39,19 @@ A production-ready, scalable leaderboard microservice built with Go for game app
 - **Logging**: Zerolog
 - **Testing**: Testify
 - **Containerization**: Docker & Docker Compose
+
+### Design Patterns
+
+This project implements Clean Architecture with proven design patterns:
+
+- **Repository Pattern** - Data access abstraction ([REPOSITORY_PATTERN.md](REPOSITORY_PATTERN.md))
+- **Specification Pattern** - Composable query logic ([SPECIFICATION_PATTERN.md](SPECIFICATION_PATTERN.md))
+- **Decorator Pattern** - Caching and logging wrappers ([DECORATOR_IMPLEMENTATION.md](DECORATOR_IMPLEMENTATION.md))
+- **Strategy Pattern** - Pluggable ranking algorithms ([STRATEGY_PATTERN.md](STRATEGY_PATTERN.md))
+- **Factory Pattern** - Dependency injection ([FACTORY_PATTERN.md](FACTORY_PATTERN.md))
+- **Unit of Work** - Transaction management ([UNIT_OF_WORK.md](UNIT_OF_WORK.md))
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [CLEAN_ARCHITECTURE_5_5.md](CLEAN_ARCHITECTURE_5_5.md) for details.
 
 ## 🚀 Quick Start
 
@@ -245,6 +261,43 @@ GET /ready          # Readiness probe (Kubernetes)
 GET /live           # Liveness probe (Kubernetes)
 ```
 
+### WebSocket Endpoints
+
+#### Real-time Leaderboard Updates
+```
+ws://localhost:8080/api/v1/ws/leaderboard?season=global&token=<your_jwt_token>
+```
+
+Connect to receive real-time leaderboard updates when scores are submitted.
+
+**Connection:**
+- Add JWT token as query parameter: `?token=YOUR_JWT_TOKEN`
+- Specify season: `?season=global` (optional, default: "global")
+
+**Received Messages:**
+```json
+{
+  "type": "leaderboard_update",
+  "data": {
+    "entries": [...],
+    "total_count": 150,
+    "season": "global"
+  }
+}
+```
+
+**Example (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://localhost:8080/api/v1/ws/leaderboard?season=global&token=' + jwtToken);
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Leaderboard update:', data);
+};
+```
+
+See [WEBSOCKET.md](WEBSOCKET.md) for detailed documentation.
+
 ## 🧪 Testing
 
 ```bash
@@ -260,6 +313,16 @@ go test -v ./internal/leaderboard/handler -run TestLeaderboardHandler
 
 # Run with race detector
 go test -race ./...
+```
+
+### Load Testing & Data Seeding
+
+```bash
+# Seed database with test users and scores
+go run cmd/seed/main.go 1000  # Creates 1000 test users
+
+# Run load testing simulator
+go run cmd/simulator/main.go  # Simulates real-time score submissions
 ```
 
 ## 🔧 Configuration
@@ -414,7 +477,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.25'
 
     - name: Install dependencies
       run: go mod download
@@ -444,35 +507,15 @@ jobs:
 
 ## 🌟 Extensions & Future Features
 
-### 1. Real-time Updates with WebSockets
-
-Add WebSocket support for live leaderboard updates:
-
-```go
-// internal/handlers/websocket_handler.go
-func (h *LeaderboardHandler) WebSocketLeaderboard(w http.ResponseWriter, r *http.Request) {
-    conn, _ := upgrader.Upgrade(w, r, nil)
-    defer conn.Close()
-
-    // Subscribe to Redis pub/sub for score updates
-    pubsub := h.redis.Subscribe(ctx, "leaderboard:updates")
-
-    for msg := range pubsub.Channel() {
-        conn.WriteJSON(msg.Payload)
-    }
-}
-```
-
-### 2. Advanced Anti-Cheat
+### 1. Advanced Anti-Cheat
 
 Implement score validation and anomaly detection:
 
-- Score velocity checks
-- Pattern recognition
+- Score velocity checks (limit score increases per time window)
+- Pattern recognition for suspicious behavior
 - Statistical outlier detection
-- Machine learning models
 
-### 3. Seasonal Rotation
+### 2. Seasonal Rotation
 
 Auto-rotate seasons with cron jobs:
 
@@ -484,7 +527,7 @@ func (s *Service) RotateSeason() {
 }
 ```
 
-### 4. Analytics Dashboard
+### 3. Analytics Dashboard
 
 Track metrics with Prometheus/Grafana:
 
@@ -493,7 +536,7 @@ Track metrics with Prometheus/Grafana:
 - Cache hit/miss ratios
 - User activity patterns
 
-### 5. OAuth2 Integration
+### 4. OAuth2 Integration
 
 Add Supabase OAuth2 support:
 
@@ -541,4 +584,4 @@ Built with ❤️ by Haler
 
 ---
 
-**Need help?** Open an issue or contact [your-email@example.com]
+**Need help?** Open an issue on GitHub
