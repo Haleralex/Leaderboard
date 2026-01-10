@@ -64,7 +64,7 @@ func main() {
 func seedData(db *sql.DB, numUsers int) error {
 	ctx := context.Background()
 	batchSize := 10000
-	rand.Seed(time.Now().UnixNano())
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	names := []string{
 		"Alex", "Bailey", "Casey", "Dakota", "Evan", "Finley", "Graham", "Harper",
@@ -97,8 +97,8 @@ func seedData(db *sql.DB, numUsers int) error {
 
 		for i := batchStart; i < batchEnd; i++ {
 			// Generate realistic user data
-			name := names[rand.Intn(len(names))] + " " + surnames[rand.Intn(len(surnames))]
-			email := fmt.Sprintf("player_%d@%s", i, domains[rand.Intn(len(domains))])
+			name := names[rng.Intn(len(names))] + " " + surnames[rng.Intn(len(surnames))]
+			email := fmt.Sprintf("player_%d@%s", i, domains[rng.Intn(len(domains))])
 
 			// Insert user
 			var userID string
@@ -120,7 +120,7 @@ func seedData(db *sql.DB, numUsers int) error {
 			// Insert scores for multiple seasons (realistic distribution)
 			for _, season := range seasons {
 				// Use normal-like distribution for scores (most players mid-range, few at extremes)
-				score := int64(gaussianScore(0, 500000, 1000000))
+				score := int64(gaussianScore(rng, 0, 500000, 1000000))
 				if score < 0 {
 					score = 0
 				}
@@ -153,10 +153,10 @@ func seedData(db *sql.DB, numUsers int) error {
 
 // gaussianScore generates score with normal distribution
 // min: minimum score, mean: center of distribution, max: maximum possible
-func gaussianScore(min, mean, max float64) int64 {
+func gaussianScore(rng *rand.Rand, min, mean, max float64) int64 {
 	// Normal distribution with std dev = range/4
 	stdDev := (max - min) / 4
-	value := rand.NormFloat64()*stdDev + mean
+	value := rng.NormFloat64()*stdDev + mean
 
 	if value < min {
 		value = min
@@ -166,11 +166,4 @@ func gaussianScore(min, mean, max float64) int64 {
 	}
 
 	return int64(math.Round(value))
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
