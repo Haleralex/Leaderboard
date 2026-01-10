@@ -30,7 +30,7 @@ A production-ready, scalable leaderboard microservice built with Go for game app
 
 - **Language**: Go 1.25+
 - **Router**: Chi v5
-- **Database**: PostgreSQL (Supabase) with pgx/v5
+- **Database**: PostgreSQL (Supabase) with GORM
 - **Cache**: Redis v7 with go-redis/v9
 - **Auth**: JWT (golang-jwt/jwt/v5)
 - **Logging**: Zerolog
@@ -78,9 +78,6 @@ go mod download
 
 # Run the service
 go run cmd/server/main.go
-
-# Or using Make
-make run
 ```
 
 The service will start on `http://localhost:8080`
@@ -255,10 +252,11 @@ GET /live           # Liveness probe (Kubernetes)
 go test ./...
 
 # Run with coverage
-make test-coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 
 # Run specific test
-go test -v ./internal/handlers -run TestSubmitScore_Success
+go test -v ./internal/leaderboard/handler -run TestLeaderboardHandler
 
 # Run with race detector
 go test -race ./...
@@ -286,37 +284,42 @@ Environment variables (`.env` file):
 ```
 leaderboard-service/
 ├── cmd/
-│   └── server/
-│       └── main.go              # Application entry point
+│   ├── server/
+│   │   └── main.go              # Application entry point
+│   ├── seed/
+│   │   └── main.go              # Database seeding
+│   └── simulator/
+│       └── main.go              # Load testing simulator
 ├── internal/
-│   ├── config/
-│   │   └── config.go            # Configuration management
-│   ├── database/
-│   │   ├── postgres.go          # PostgreSQL connection
-│   │   └── redis.go             # Redis connection
-│   ├── handlers/
-│   │   ├── auth_handler.go      # Auth endpoints
-│   │   ├── leaderboard_handler.go  # Leaderboard endpoints
-│   │   ├── health_handler.go    # Health checks
-│   │   └── *_test.go            # Handler tests
-│   ├── middleware/
-│   │   ├── jwt.go               # JWT authentication
-│   │   ├── ratelimit.go         # Rate limiting
-│   │   ├── logger.go            # Request logging
-│   │   └── cors.go              # CORS configuration
-│   ├── models/
-│   │   ├── user.go              # User models
-│   │   ├── score.go             # Score models
-│   │   └── auth.go              # Auth models
-│   └── service/
-│       ├── auth_service.go      # Auth business logic
-│       └── leaderboard_service.go  # Leaderboard business logic
+│   ├── auth/                    # Auth module
+│   │   ├── domain/              # Domain models & events
+│   │   ├── handler/             # HTTP handlers
+│   │   ├── repository/          # Data access
+│   │   ├── service/             # Business logic
+│   │   └── models/              # DTOs
+│   ├── leaderboard/             # Leaderboard module
+│   │   ├── domain/              # Domain models & events
+│   │   ├── handler/             # HTTP handlers
+│   │   ├── repository/          # Data access
+│   │   ├── service/             # Business logic
+│   │   └── models/              # DTOs
+│   ├── shared/                  # Shared components
+│   │   ├── config/              # Configuration management
+│   │   ├── database/            # PostgreSQL & Redis connections
+│   │   ├── middleware/          # JWT, rate limiting, CORS, logger
+│   │   ├── repository/          # Base repository, specifications, UoW, decorators
+│   │   ├── eventbus/            # Event bus for domain events
+│   │   └── utils/               # Helpers, validators, errors
+│   ├── factory/                 # Factory pattern implementations
+│   ├── strategy/                # Strategy pattern for ranking
+│   ├── websocket/               # WebSocket hub & clients
+│   └── handlers/                # Shared handlers (health, websocket)
 ├── sql/
 │   └── schema.sql               # Database schema
+├── scripts/                     # Utility scripts
 ├── .env.example                 # Example environment variables
 ├── Dockerfile                   # Docker image definition
 ├── docker-compose.yml           # Docker Compose configuration
-├── Makefile                     # Build and run commands
 ├── go.mod                       # Go module definition
 └── README.md                    # This file
 ```
