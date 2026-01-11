@@ -34,9 +34,10 @@ func (r *CachedScoreRepository) Upsert(ctx context.Context, score *leaderboardmo
 		return err
 	}
 
-	// Invalidate related caches
+	// Invalidate ALL leaderboard caches for this season (including all pagination/sort combinations)
 	r.cache.Delete(r.scoreKey(score.UserID, score.Season))
-	r.cache.Delete(r.leaderboardKey(score.Season))
+	r.cache.DeleteByPrefix(fmt.Sprintf("leaderboard:%s:", score.Season))
+	r.cache.Delete(r.countKey(score.Season))
 
 	return nil
 }
@@ -62,30 +63,11 @@ func (r *CachedScoreRepository) FindByUserAndSeason(ctx context.Context, userID 
 	return score, nil
 }
 
-// GetLeaderboard retrieves leaderboard with caching
+// GetLeaderboard retrieves leaderboard WITHOUT caching (dynamic data)
 func (r *CachedScoreRepository) GetLeaderboard(ctx context.Context, season string, limit, offset int, sortOrder string) ([]leaderboardmodels.LeaderboardEntry, int64, error) {
-	// Cache key includes pagination and sort params
-	key := r.leaderboardKeyWithParams(season, limit, offset, sortOrder)
-
-	// Check cache
-	if cached, ok := r.cache.Get(key); ok {
-		result := cached.(leaderboardCacheEntry)
-		return result.Entries, result.TotalCount, nil
-	}
-
-	// Cache miss
-	entries, totalCount, err := r.inner.GetLeaderboard(ctx, season, limit, offset, sortOrder)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Store in cache
-	r.cache.Set(key, leaderboardCacheEntry{
-		Entries:    entries,
-		TotalCount: totalCount,
-	}, r.ttl)
-
-	return entries, totalCount, nil
+	// Leaderboard changes frequently - always fetch fresh data from DB
+	// Caching leaderboard causes stale data issues with real-time updates
+	return r.inner.GetLeaderboard(ctx, season, limit, offset, sortOrder)
 }
 
 // CountBySeason retrieves count with caching
@@ -116,9 +98,9 @@ func (r *CachedScoreRepository) DeleteByUserAndSeason(ctx context.Context, userI
 		return err
 	}
 
-	// Invalidate caches
+	// Invalidate ALL leaderboard caches for this season
 	r.cache.Delete(r.scoreKey(userID, season))
-	r.cache.Delete(r.leaderboardKey(season))
+	r.cache.DeleteByPrefix(fmt.Sprintf("leaderboard:%s:", season))
 	r.cache.Delete(r.countKey(season))
 
 	return nil

@@ -42,7 +42,7 @@ func (f *DefaultServiceFactory) CreateAuthService() interface{} {
 func (f *DefaultServiceFactory) CreateLeaderboardService() interface{} {
 	scoreRepo := f.repoFactory.CreateScoreRepository()
 	userRepo := f.repoFactory.CreateUserRepository()
-	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, f.redis)
+	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, f.redis, f.config)
 }
 
 // CreateUserManagementService создает сервис управления пользователями
@@ -90,7 +90,7 @@ func (f *TypedServiceFactory) CreateAuthService() *authservice.AuthService {
 func (f *TypedServiceFactory) CreateLeaderboardService() *leaderboardservice.LeaderboardService {
 	scoreRepo := f.repoFactory.CreateScoreRepository()
 	userRepo := f.repoFactory.CreateUserRepository()
-	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, f.redis)
+	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, f.redis, f.config)
 }
 
 // CreateUserManagementService создает UserManagementService

@@ -18,7 +18,7 @@ import (
 )
 
 // Helper function to create leaderboard service with repositories for benchmarks
-func newBenchLeaderboardService(db *database.PostgresDB, redis *database.RedisClient) *leaderboardservice.LeaderboardService {
+func newBenchLeaderboardService(db *database.PostgresDB, redis *database.RedisClient, cfg *config.Config) *leaderboardservice.LeaderboardService {
 	// Use decorators in benchmarks
 	cache := decorators.NewSimpleCache()
 
@@ -28,7 +28,7 @@ func newBenchLeaderboardService(db *database.PostgresDB, redis *database.RedisCl
 	userRepo := decorators.NewCachedUserRepository(baseUserRepo, cache)
 	scoreRepo := decorators.NewCachedScoreRepository(baseScoreRepo, cache)
 
-	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis)
+	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
 }
 
 // BenchmarkGetLeaderboardWithRedis measures performance with Redis cache
@@ -58,7 +58,7 @@ func BenchmarkGetLeaderboardWithRedis(b *testing.B) {
 	}
 	defer redis.Close()
 
-	service := newBenchLeaderboardService(db, redis)
+	service := newBenchLeaderboardService(db, redis, cfg)
 
 	// Prepare test data
 	ctx := context.Background()
@@ -96,7 +96,7 @@ func BenchmarkGetLeaderboardNoRedis(b *testing.B) {
 	}
 	defer db.Close()
 
-	service := newBenchLeaderboardService(db, nil) // No Redis
+	service := newBenchLeaderboardService(db, nil, cfg) // No Redis
 
 	ctx := context.Background()
 	query := &leaderboardmodels.LeaderboardQuery{
@@ -143,7 +143,7 @@ func BenchmarkSubmitScoreWithRedis(b *testing.B) {
 	}
 	defer redis.Close()
 
-	service := newBenchLeaderboardService(db, redis)
+	service := newBenchLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	// Create test user
@@ -179,7 +179,7 @@ func BenchmarkSubmitScoreNoRedis(b *testing.B) {
 	}
 	defer db.Close()
 
-	service := newBenchLeaderboardService(db, nil) // No Redis
+	service := newBenchLeaderboardService(db, nil, cfg) // No Redis
 
 	ctx := context.Background()
 	userID := uuid.New()
@@ -214,7 +214,7 @@ func BenchmarkGetUserRank(b *testing.B) {
 	}
 	defer db.Close()
 
-	service := newBenchLeaderboardService(db, nil)
+	service := newBenchLeaderboardService(db, nil, cfg)
 	ctx := context.Background()
 
 	// Get a valid user ID from database
@@ -261,7 +261,7 @@ func BenchmarkParallelGetLeaderboard(b *testing.B) {
 	}
 	defer redis.Close()
 
-	service := newBenchLeaderboardService(db, redis)
+	service := newBenchLeaderboardService(db, redis, cfg)
 
 	query := &leaderboardmodels.LeaderboardQuery{
 		Season:    "global",
@@ -299,7 +299,7 @@ func BenchmarkLeaderboardPagination(b *testing.B) {
 	}
 	defer db.Close()
 
-	service := newBenchLeaderboardService(db, nil)
+	service := newBenchLeaderboardService(db, nil, cfg)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -346,7 +346,7 @@ func BenchmarkRedisCacheHit(b *testing.B) {
 	}
 	defer redis.Close()
 
-	service := newBenchLeaderboardService(db, redis)
+	service := newBenchLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	// Warm up cache
@@ -398,7 +398,7 @@ func BenchmarkDifferentSeasons(b *testing.B) {
 	}
 	defer redis.Close()
 
-	service := newBenchLeaderboardService(db, redis)
+	service := newBenchLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	seasons := []string{"global", "2024", "2025", "january", "february"}

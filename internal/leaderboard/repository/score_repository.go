@@ -11,6 +11,7 @@ import (
 	"leaderboard-service/internal/shared/repository"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -72,22 +73,55 @@ func (r *PostgresScoreRepository) FindByUserAndSeason(ctx context.Context, userI
 
 // GetLeaderboard retrieves paginated leaderboard entries for a season with user details
 func (r *PostgresScoreRepository) GetLeaderboard(ctx context.Context, season string, limit, offset int, sortOrder string) ([]models.LeaderboardEntry, int64, error) {
-	// Always sort by rank ASC (lower rank = better position)
-	// sortOrder parameter kept for backward compatibility but ignored
-	orderBy := "rank ASC"
+	// Sort by score directly, not by rank (which is computed)
+	// desc = highest scores first (default leaderboard view)
+	// asc = lowest scores first (rare case)
+	var orderBy string
+	if sortOrder == "asc" {
+		orderBy = "s.score ASC, s.timestamp ASC"
+	} else {
+		orderBy = "s.score DESC, s.timestamp ASC"
+	}
 
 	var entries []models.LeaderboardEntry
-	err := r.db.DB.WithContext(ctx).Raw(`
-		SELECT rank, user_id, user_name, score, season, timestamp
-		FROM leaderboard_view
-		WHERE season = ?
-		ORDER BY `+orderBy+`
-		LIMIT ? OFFSET ?
-	`, season, limit, offset).Scan(&entries).Error
-
+	// Force fresh query without prepared statement cache
+	// Use a new connection to avoid transaction isolation issues
+	err := r.db.DB.WithContext(ctx).
+		Session(&gorm.Session{
+			PrepareStmt:            false,
+			SkipDefaultTransaction: true,
+		}).
+		Raw(`
+			SELECT 
+				DENSE_RANK() OVER (ORDER BY s.score DESC, s.timestamp ASC) as rank,
+				s.user_id,
+				u.name as user_name,
+				s.score,
+				s.season,
+				s.timestamp
+			FROM scores s
+			JOIN users u ON s.user_id = u.id
+			WHERE s.season = ?
+			ORDER BY `+orderBy+`
+			LIMIT ? OFFSET ?
+		`, season, limit, offset).Scan(&entries).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query leaderboard: %w", err)
 	}
+
+	// Log query results for debugging
+	top3Debug := "["
+	for i := 0; i < 3 && i < len(entries); i++ {
+		if i > 0 {
+			top3Debug += ", "
+		}
+		top3Debug += fmt.Sprintf("{rank:%d, score:%d, name:%s, ts:%v}",
+			entries[i].Rank,
+			entries[i].Score,
+			entries[i].UserName,
+			entries[i].Timestamp)
+	}
+	top3Debug += "]"
 
 	// Get total count for pagination
 	totalCount, err := r.CountBySeason(ctx, season)

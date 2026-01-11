@@ -19,7 +19,7 @@ import (
 )
 
 // Helper function to create leaderboard service with repositories
-func newTestLeaderboardService(db *database.PostgresDB, redis *database.RedisClient) *leaderboardservice.LeaderboardService {
+func newTestLeaderboardService(db *database.PostgresDB, redis *database.RedisClient, cfg *config.Config) *leaderboardservice.LeaderboardService {
 	// Use decorators in tests too
 	cache := decorators.NewSimpleCache()
 
@@ -29,7 +29,7 @@ func newTestLeaderboardService(db *database.PostgresDB, redis *database.RedisCli
 	userRepo := decorators.NewCachedUserRepository(baseUserRepo, cache)
 	scoreRepo := decorators.NewCachedScoreRepository(baseScoreRepo, cache)
 
-	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis)
+	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
 }
 
 // TestIntegrationGetLeaderboardWithRedis tests leaderboard retrieval with Redis cache
@@ -59,7 +59,7 @@ func TestIntegrationGetLeaderboardWithRedis(t *testing.T) {
 	require.NoError(t, err, "Failed to connect to Redis")
 	defer redis.Close()
 
-	service := newTestLeaderboardService(db, redis)
+	service := newTestLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	// First call - should hit database
@@ -110,7 +110,7 @@ func TestIntegrationGetLeaderboardNoRedis(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	service := newTestLeaderboardService(db, nil) // No Redis
+	service := newTestLeaderboardService(db, nil, cfg) // No Redis
 
 	ctx := context.Background()
 	query := &leaderboardmodels.LeaderboardQuery{
@@ -153,7 +153,7 @@ func TestIntegrationSubmitScoreAndRetrieve(t *testing.T) {
 	require.NoError(t, err)
 	defer redis.Close()
 
-	service := newTestLeaderboardService(db, redis)
+	service := newTestLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	// Submit a score
@@ -217,7 +217,7 @@ func TestIntegrationConcurrentAccess(t *testing.T) {
 	require.NoError(t, err)
 	defer redis.Close()
 
-	service := newTestLeaderboardService(db, redis)
+	service := newTestLeaderboardService(db, redis, cfg)
 
 	// Launch concurrent requests
 	concurrency := 10
@@ -278,7 +278,7 @@ func TestIntegrationRedisCacheInvalidation(t *testing.T) {
 	require.NoError(t, err)
 	defer redis.Close()
 
-	service := newTestLeaderboardService(db, redis)
+	service := newTestLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
 	season := "cache_test"
@@ -345,7 +345,7 @@ func TestIntegrationPagination(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	service := newTestLeaderboardService(db, nil)
+	service := newTestLeaderboardService(db, nil, cfg)
 	ctx := context.Background()
 
 	// Get first page

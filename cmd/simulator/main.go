@@ -74,7 +74,7 @@ func main() {
 	scoreRepo := decorators.NewCachedScoreRepository(baseScoreRepo, cache)
 
 	// Initialize services
-	leaderboardService := leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis)
+	leaderboardService := leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
 
 	// Load existing users from database
 	users := loadExistingUsers(db)

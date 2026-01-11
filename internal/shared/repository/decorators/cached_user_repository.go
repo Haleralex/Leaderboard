@@ -73,6 +73,18 @@ func (c *SimpleCache) Delete(key string) {
 	delete(c.data, key)
 }
 
+// DeleteByPrefix removes all keys starting with prefix
+func (c *SimpleCache) DeleteByPrefix(prefix string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for key := range c.data {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(c.data, key)
+		}
+	}
+}
+
 // Clear removes all entries from cache
 func (c *SimpleCache) Clear() {
 	c.mu.Lock()

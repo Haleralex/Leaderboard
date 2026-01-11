@@ -88,23 +88,27 @@ func (s *LeaderboardService) SubmitScore(ctx context.Context, userID uuid.UUID, 
 		return nil, fmt.Errorf("score exceeds maximum allowed value of %d", s.config.Validation.MaxScore)
 	}
 
-	// 2. Проверяем текущий score в Redis (если доступен)
-	if s.redis != nil {
-		key := redisLeaderboardPrefix + season
-		currentScore, err := s.redis.Client.ZScore(ctx, key, userID.String()).Result()
+	// DISABLED: Redis score check disabled - using PostgreSQL as single source of truth
+	// Database handles score improvement check through unique constraint and timestamp
+	/*
+		// 2. Проверяем текущий score в Redis (если доступен)
+		if s.redis != nil {
+			key := redisLeaderboardPrefix + season
+			currentScore, err := s.redis.Client.ZScore(ctx, key, userID.String()).Result()
 
-		if err == nil {
-			// Обновляем только если новый score ЛУЧШЕ
-			if req.Score <= int64(currentScore) {
-				log.Info().
-					Str("user_id", userID.String()).
-					Int64("current", int64(currentScore)).
-					Int64("new", req.Score).
-					Msg("⏭️ Score not improved, skipping update")
-				return nil, fmt.Errorf("score not improved: current=%d, new=%d", int64(currentScore), req.Score)
+			if err == nil {
+				// Обновляем только если новый score ЛУЧШЕ
+				if req.Score <= int64(currentScore) {
+					log.Info().
+						Str("user_id", userID.String()).
+						Int64("current", int64(currentScore)).
+						Int64("new", req.Score).
+						Msg("⏭️ Score not improved, skipping update")
+					return nil, fmt.Errorf("score not improved: current=%d, new=%d", int64(currentScore), req.Score)
+				}
 			}
 		}
-	}
+	*/
 
 	// 3. Создаём score объект
 	score := models.Score{
@@ -126,13 +130,17 @@ func (s *LeaderboardService) SubmitScore(ctx context.Context, userID uuid.UUID, 
 		Str("season", season).
 		Msg("✅ Score saved to database")
 
-	// 5. Обновляем Redis cache (синхронно для консистентности)
-	if s.redis != nil {
-		log.Debug().Str("action", "cache_update").Str("season", season).Msg("Updating Redis cache")
-		s.updateRedisCache(ctx, userID, season, req.Score)
-	} else {
-		log.Debug().Msg("Redis not available, skipping cache update")
-	}
+	// DISABLED: Redis cache sync disabled - using PostgreSQL as single source of truth
+	// Redis caching causes stale data issues with real-time WebSocket updates
+	/*
+		// 5. Обновляем Redis cache (синхронно для консистентности)
+		if s.redis != nil {
+			log.Debug().Str("action", "cache_update").Str("season", season).Msg("Updating Redis cache")
+			s.updateRedisCache(ctx, userID, season, req.Score)
+		} else {
+			log.Debug().Msg("Redis not available, skipping cache update")
+		}
+	*/
 
 	// 6. Broadcast к WebSocket клиентам (async, не блокируем ответ)
 	if s.hub != nil {
@@ -152,11 +160,11 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, query *models.L
 		season = "global"
 	}
 
-	// Skip Redis cache for large requests (>100) because Redis sorted set doesn't preserve
-	// order for elements with the same score, which can cause missing entries
-	skipCache := query.Limit > 100
+	// DISABLED: Redis cache causes stale data issues with WebSocket real-time updates
+	// Always fetch from PostgreSQL to ensure fresh data
+	// Redis sorted sets don't preserve order for same scores, causing missing entries
+	/* skipCache := false
 
-	// Try Redis cache first (if available and not skipped)
 	if s.redis != nil && !skipCache {
 		log.Debug().Str("source", "Redis").Str("season", season).Msg("Attempting to fetch leaderboard from Redis cache")
 		entries, err := s.getLeaderboardFromRedis(ctx, season, query)
@@ -169,29 +177,34 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, query *models.L
 		log.Debug().Int("limit", query.Limit).Msg("Skipping Redis cache for large request (limit > 100)")
 	} else {
 		log.Debug().Msg("Redis not available, skipping cache lookup")
-	}
+	} */
 
-	// Fallback to PostgreSQL using GORM
-	log.Info().Str("source", "GORM").Str("season", season).Msg("Fetching leaderboard from database")
+	// Fetch directly from PostgreSQL (single source of truth)
+	log.Info().Str("source", "PostgreSQL").Str("season", season).Msg("Fetching leaderboard from database")
 	entries, totalCount, err := s.getLeaderboardFromDB(ctx, season, query)
 	if err != nil {
-		return nil, err
+		log.Error().Err(err).Str("season", season).Msg("Failed to fetch leaderboard from database")
+		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 
 	log.Info().
-		Str("source", "GORM").
+		Str("source", "PostgreSQL").
 		Str("season", season).
 		Int("entries", len(entries)).
 		Int64("total", totalCount).
 		Msg("✓ Leaderboard loaded from database")
 
-	// Cache in Redis for next request (if available)
-	if s.redis != nil {
-		log.Debug().Str("action", "cache_store").Str("season", season).Int("entries", len(entries)).Msg("Caching leaderboard in Redis asynchronously")
-		go s.cacheLeaderboardInRedis(context.Background(), season, entries)
-	} else {
-		log.Debug().Msg("Redis not available, skipping cache storage")
-	}
+	// DISABLED: Redis caching disabled to ensure fresh data from PostgreSQL
+	// Redis cache causes stale data issues - always fetch from PostgreSQL instead
+	/*
+		// Cache in Redis for next request (if available)
+		if s.redis != nil {
+			log.Debug().Str("action", "cache_store").Str("season", season).Int("entries", len(entries)).Msg("Caching leaderboard in Redis asynchronously")
+			go s.cacheLeaderboardInRedis(context.Background(), season, entries)
+		} else {
+			log.Debug().Msg("Redis not available, skipping cache storage")
+		}
+	*/
 
 	response := s.buildResponse(entries, query)
 	response.TotalCount = totalCount
@@ -483,12 +496,8 @@ func (s *LeaderboardService) SendInitialSnapshot(season string, requestedLimit i
 		SortOrder: "desc",
 	}
 
-	// Clear Redis cache for this season to force DB fetch
-	if s.redis != nil {
-		key := redisLeaderboardPrefix + season
-		s.redis.Client.Del(ctx, key)
-		log.Info().Str("season", season).Msg("🗑️ Cleared Redis cache for initial snapshot")
-	}
+	// Redis cache not used - PostgreSQL is the single source of truth
+	// No need to clear cache as we always fetch fresh data from database
 
 	leaderboard, err := s.GetLeaderboard(ctx, query)
 	if err != nil {
@@ -509,13 +518,20 @@ func (s *LeaderboardService) SendInitialSnapshot(season string, requestedLimit i
 		return
 	}
 
+	log.Info().
+		Str("season", season).
+		Int("entries", len(leaderboard.Entries)).
+		Int("json_size", len(jsonData)).
+		Msg("📦📦📦 Initial snapshot marshaled, sending to client channel")
+
 	// Send to client
 	select {
 	case clientSend <- jsonData:
 		log.Info().
 			Str("season", season).
 			Int("entries", len(leaderboard.Entries)).
-			Msg("✅ Initial snapshot sent to client")
+			Int("json_size", len(jsonData)).
+			Msg("✅✅✅ Initial snapshot QUEUED in client Send channel")
 	default:
 		log.Warn().Str("season", season).Msg("⚠️ Failed to send initial snapshot: channel full")
 	}

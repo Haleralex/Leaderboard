@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -157,6 +158,61 @@ func (h *Hub) broadcastToSeason(message *BroadcastMessage) {
 		log.Warn().Str("season", message.Season).Msg("⚠️ No clients connected for this season")
 		return
 	}
+
+	// DISABLED: Hash check causes issues when data doesn't change but needs to be sent
+	// (e.g., initial snapshots, periodic updates, client reconnects)
+	// Always broadcast to ensure clients get updates
+	/*
+		// Calculate hash of the leaderboard data to avoid sending duplicate broadcasts
+		hashData, err := json.Marshal(message.Leaderboard)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to marshal leaderboard for hash calculation")
+			return
+		}
+		hash := sha256.Sum256(hashData)
+		hashStr := hex.EncodeToString(hash[:])
+
+		// Check if this is the same data as last broadcast
+		h.mu.Lock()
+		lastHash, exists := h.lastBroadcastHash[message.Season]
+		if exists && lastHash == hashStr {
+			log.Info().
+				Str("season", message.Season).
+				Str("hash", hashStr[:16]+"...").
+				Msg("🔄 Skipping broadcast - data unchanged from last broadcast")
+			h.mu.Unlock()
+			return
+		}
+		h.lastBroadcastHash[message.Season] = hashStr
+		h.mu.Unlock()
+
+		log.Info().
+			Str("season", message.Season).
+			Str("hash", hashStr[:16]+"...").
+			Bool("data_changed", !exists || lastHash != hashStr).
+			Msg("✨ Data changed - proceeding with broadcast")
+	*/
+
+	log.Info().
+		Str("season", message.Season).
+		Msg("✨ Proceeding with broadcast (hash check disabled)")
+
+	// Log first 3 entries from the leaderboard before filtering
+	top3Log := "["
+	for i := 0; i < 3 && i < len(message.Leaderboard.Entries); i++ {
+		entry := message.Leaderboard.Entries[i]
+		if i > 0 {
+			top3Log += ", "
+		}
+		top3Log += fmt.Sprintf("{rank:%d, score:%d, name:%s, ts:%v}",
+			entry.Rank, entry.Score, entry.UserName, entry.Timestamp)
+	}
+	top3Log += "]"
+	log.Info().
+		Str("season", message.Season).
+		Int("total_entries", len(message.Leaderboard.Entries)).
+		Str("top3_in_hub", top3Log).
+		Msg("📊 Hub received leaderboard data")
 
 	// Broadcast to each client with their requested limit
 	sentCount := 0

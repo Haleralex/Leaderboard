@@ -78,18 +78,33 @@ func (c *Client) ReadPump() {
 			break
 		}
 
+		log.Info().
+			Str("user_id", c.UserID.String()).
+			Str("season", c.Season).
+			Int("message_size", len(message)).
+			Str("message", string(message)).
+			Msg("📥📥📥 ReadPump: Received message from client")
+
 		// Parse client messages
 		var msg map[string]interface{}
 		if err := json.Unmarshal(message, &msg); err == nil {
 			if msgType, ok := msg["type"].(string); ok && msgType == "update_limit" {
 				if limit, ok := msg["limit"].(float64); ok {
+					old := c.RequestedLimit
 					c.RequestedLimit = int(limit)
 					log.Info().
 						Str("user_id", c.UserID.String()).
+						Int("old_limit", old).
 						Int("new_limit", c.RequestedLimit).
-						Msg("📊 Client updated requested limit")
+						Msg("📊📊📊 Client updated requested limit")
 				}
 			}
+		} else {
+			log.Warn().
+				Err(err).
+				Str("user_id", c.UserID.String()).
+				Str("raw_message", string(message)).
+				Msg("⚠️ Failed to parse client message")
 		}
 	}
 }
