@@ -9,22 +9,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	// Time allowed to write a message to the peer
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period (must be less than pongWait)
-	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer
-	maxMessageSize = 512
-
-	// Buffer size for client send channel
-	sendBufferSize = 256
-)
+// Client configuration
+type ClientConfig struct {
+	WriteWait      time.Duration
+	PongWait       time.Duration
+	PingPeriod     time.Duration
+	MaxMessageSize int64
+}
 
 // Client represents a single WebSocket connection
 type Client struct {
@@ -45,17 +36,21 @@ type Client struct {
 
 	// Requested limit - how many entries client wants (updated dynamically)
 	RequestedLimit int
+
+	// Configuration
+	config ClientConfig
 }
 
 // NewClient creates a new WebSocket client
-func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, season string) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, season string, config ClientConfig) *Client {
 	return &Client{
 		Hub:            hub,
 		Conn:           conn,
-		Send:           make(chan []byte, sendBufferSize),
+		Send:           make(chan []byte, 256),
 		UserID:         userID,
 		Season:         season,
-		RequestedLimit: 50, // Default to TOP-50
+		RequestedLimit: hub.defaultLimit,
+		config:         config,
 	}
 }
 
@@ -67,10 +62,10 @@ func (c *Client) ReadPump() {
 		c.Conn.Close()
 	}()
 
-	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetReadLimit(c.config.MaxMessageSize)
+	c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
 		return nil
 	})
 
@@ -102,7 +97,7 @@ func (c *Client) ReadPump() {
 // WritePump pumps messages from the hub to the WebSocket connection
 // A goroutine running WritePump is started for each connection
 func (c *Client) WritePump() {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(c.config.PingPeriod)
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
@@ -111,7 +106,7 @@ func (c *Client) WritePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
 			if !ok {
 				// The hub closed the channel
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -146,7 +141,7 @@ func (c *Client) WritePump() {
 			log.Info().Msg("✅ WritePump: Message successfully written to WebSocket")
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

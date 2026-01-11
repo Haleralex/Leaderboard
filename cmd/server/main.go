@@ -64,7 +64,11 @@ func main() {
 	defer cancel()
 
 	// Initialize WebSocket Hub
-	wsHub := websocket.NewHub(ctx)
+	wsHub := websocket.NewHub(
+		ctx,
+		cfg.GetWebSocketBroadcastInterval(),
+		cfg.WebSocket.DefaultLimit,
+	)
 	go wsHub.Run() // Start hub in background goroutine
 
 	// Create shared cache for decorators
@@ -87,11 +91,11 @@ func main() {
 
 	// Initialize services with decorated repositories
 	authService := authservice.NewAuthService(userRepo, jwtMiddleware, cfg)
-	leaderboardService := leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis)
+	leaderboardService := leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
 	leaderboardService.SetHub(wsHub) // Connect WebSocket broadcasting
 
 	// Initialize handlers (wsHandler needs leaderboardService for initial snapshots)
-	wsHandler := handlers.NewWebSocketHandler(wsHub, jwtMiddleware, leaderboardService)
+	wsHandler := handlers.NewWebSocketHandler(wsHub, jwtMiddleware, cfg, leaderboardService)
 	authHandler := authhandler.NewAuthHandler(authService)
 	leaderboardHandler := leaderboardhandler.NewLeaderboardHandler(leaderboardService)
 	healthHandler := handlers.NewHealthHandler(db, redis)

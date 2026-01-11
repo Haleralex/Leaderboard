@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"leaderboard-service/internal/leaderboard/models"
+	"leaderboard-service/internal/shared/config"
 	"leaderboard-service/internal/shared/database"
 	"leaderboard-service/internal/shared/repository"
 	ws "leaderboard-service/internal/websocket"
@@ -19,7 +20,6 @@ import (
 const (
 	redisLeaderboardPrefix = "leaderboard:"
 	redisUserScorePrefix   = "user_score:"
-	redisCacheTTL          = 5 * time.Minute
 )
 
 // LeaderboardService handles leaderboard operations
@@ -28,6 +28,7 @@ type LeaderboardService struct {
 	userRepo  repository.UserRepository
 	redis     *database.RedisClient
 	hub       BroadcastHub // WebSocket hub for real-time updates
+	config    *config.Config
 }
 
 // BroadcastHub interface for WebSocket broadcasting
@@ -36,12 +37,18 @@ type BroadcastHub interface {
 }
 
 // NewLeaderboardService creates a new leaderboard service
-func NewLeaderboardService(scoreRepo repository.ScoreRepository, userRepo repository.UserRepository, redis *database.RedisClient) *LeaderboardService {
+func NewLeaderboardService(
+	scoreRepo repository.ScoreRepository,
+	userRepo repository.UserRepository,
+	redis *database.RedisClient,
+	cfg *config.Config,
+) *LeaderboardService {
 	return &LeaderboardService{
 		scoreRepo: scoreRepo,
 		userRepo:  userRepo,
 		redis:     redis,
 		hub:       nil, // Will be set later via SetHub
+		config:    cfg,
 	}
 }
 
@@ -73,6 +80,33 @@ func (s *LeaderboardService) SubmitScore(ctx context.Context, userID uuid.UUID, 
 		season = "global"
 	}
 
+	// 1. Базовая валидация (используем config)
+	if req.Score < s.config.Validation.MinScore {
+		return nil, fmt.Errorf("score cannot be less than %d", s.config.Validation.MinScore)
+	}
+	if req.Score > s.config.Validation.MaxScore {
+		return nil, fmt.Errorf("score exceeds maximum allowed value of %d", s.config.Validation.MaxScore)
+	}
+
+	// 2. Проверяем текущий score в Redis (если доступен)
+	if s.redis != nil {
+		key := redisLeaderboardPrefix + season
+		currentScore, err := s.redis.Client.ZScore(ctx, key, userID.String()).Result()
+
+		if err == nil {
+			// Обновляем только если новый score ЛУЧШЕ
+			if req.Score <= int64(currentScore) {
+				log.Info().
+					Str("user_id", userID.String()).
+					Int64("current", int64(currentScore)).
+					Int64("new", req.Score).
+					Msg("⏭️ Score not improved, skipping update")
+				return nil, fmt.Errorf("score not improved: current=%d, new=%d", int64(currentScore), req.Score)
+			}
+		}
+	}
+
+	// 3. Создаём score объект
 	score := models.Score{
 		UserID:   userID,
 		Score:    req.Score,
@@ -80,6 +114,7 @@ func (s *LeaderboardService) SubmitScore(ctx context.Context, userID uuid.UUID, 
 		Metadata: req.Metadata,
 	}
 
+	// 4. Сохраняем в базу данных (синхронно для надежности)
 	if err := s.scoreRepo.Upsert(ctx, &score); err != nil {
 		return nil, err
 	}
@@ -89,22 +124,22 @@ func (s *LeaderboardService) SubmitScore(ctx context.Context, userID uuid.UUID, 
 		Str("user_id", userID.String()).
 		Int64("score", req.Score).
 		Str("season", season).
-		Msg("Score saved to database")
+		Msg("✅ Score saved to database")
 
-	// Update Redis cache asynchronously (if available)
+	// 5. Обновляем Redis cache (синхронно для консистентности)
 	if s.redis != nil {
-		log.Debug().Str("action", "cache_update").Str("season", season).Msg("Updating Redis cache asynchronously")
-		go s.updateRedisCache(context.Background(), userID, season, req.Score)
+		log.Debug().Str("action", "cache_update").Str("season", season).Msg("Updating Redis cache")
+		s.updateRedisCache(ctx, userID, season, req.Score)
 	} else {
 		log.Debug().Msg("Redis not available, skipping cache update")
 	}
 
-	// Broadcast updated leaderboard to WebSocket clients (async)
+	// 6. Broadcast к WebSocket клиентам (async, не блокируем ответ)
 	if s.hub != nil {
 		log.Info().Str("season", season).Msg("📡 Triggering WebSocket broadcast...")
 		go s.broadcastLeaderboardUpdate(context.Background(), season)
 	} else {
-		log.Warn().Msg("⚠️ Hub is nil, WebSocket broadcast skipped")
+		log.Debug().Msg("Hub not available, skipping broadcast")
 	}
 
 	return &score, nil
@@ -117,8 +152,12 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, query *models.L
 		season = "global"
 	}
 
-	// Try Redis cache first (if available)
-	if s.redis != nil {
+	// Skip Redis cache for large requests (>100) because Redis sorted set doesn't preserve
+	// order for elements with the same score, which can cause missing entries
+	skipCache := query.Limit > 100
+
+	// Try Redis cache first (if available and not skipped)
+	if s.redis != nil && !skipCache {
 		log.Debug().Str("source", "Redis").Str("season", season).Msg("Attempting to fetch leaderboard from Redis cache")
 		entries, err := s.getLeaderboardFromRedis(ctx, season, query)
 		if err == nil && len(entries) > 0 {
@@ -126,6 +165,8 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, query *models.L
 			return s.buildResponse(entries, query), nil
 		}
 		log.Debug().Str("season", season).Err(err).Msg("Redis cache miss or empty")
+	} else if skipCache {
+		log.Debug().Int("limit", query.Limit).Msg("Skipping Redis cache for large request (limit > 100)")
 	} else {
 		log.Debug().Msg("Redis not available, skipping cache lookup")
 	}
@@ -234,7 +275,7 @@ func (s *LeaderboardService) updateRedisCache(ctx context.Context, userID uuid.U
 	}
 
 	// Set expiry on the key
-	s.redis.Client.Expire(ctx, key, redisCacheTTL)
+	s.redis.Client.Expire(ctx, key, s.config.GetCacheLeaderboardTTL())
 	log.Debug().Str("source", "Redis").Str("key", key).Str("user_id", userID.String()).Int64("score", score).Msg("✓ Redis cache updated")
 }
 
@@ -263,8 +304,8 @@ func (s *LeaderboardService) cacheLeaderboardInRedis(ctx context.Context, season
 	}
 
 	// Set expiry
-	s.redis.Client.Expire(ctx, key, redisCacheTTL)
-	log.Debug().Str("source", "Redis").Str("key", key).Int("entries", len(entries)).Dur("ttl", redisCacheTTL).Msg("✓ Leaderboard cached in Redis")
+	s.redis.Client.Expire(ctx, key, s.config.GetCacheLeaderboardTTL())
+	log.Debug().Str("source", "Redis").Str("key", key).Int("entries", len(entries)).Dur("ttl", s.config.GetCacheLeaderboardTTL()).Msg("✓ Leaderboard cached in Redis")
 }
 
 // getUserName fetches a user's name (with caching) using GORM
@@ -421,16 +462,23 @@ func (s *LeaderboardService) handlePeriodicUpdates(seasonLimits map[string]int) 
 }
 
 // SendInitialSnapshot sends the current leaderboard to a newly connected client
-func (s *LeaderboardService) SendInitialSnapshot(season string, clientSend chan []byte) {
-	log.Info().Str("season", season).Msg("📸 Sending initial snapshot to new client")
+func (s *LeaderboardService) SendInitialSnapshot(season string, requestedLimit int, clientSend chan []byte) {
+	log.Info().
+		Str("season", season).
+		Int("requested_limit", requestedLimit).
+		Msg("📸 Sending initial snapshot to new client")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// FORCE full leaderboard fetch from DB, bypassing Redis cache with limit=50
+	// Fetch requested number of entries (default to 50 if not specified)
+	if requestedLimit <= 0 {
+		requestedLimit = 50
+	}
+
 	query := &models.LeaderboardQuery{
 		Season:    season,
-		Limit:     10000, // Send ALL entries for initial load
+		Limit:     requestedLimit, // Send only requested entries
 		Page:      0,
 		SortOrder: "desc",
 	}

@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 	"time"
@@ -31,8 +33,15 @@ type Hub struct {
 	// Context for graceful shutdown
 	ctx context.Context
 
+	// Hash of last broadcast per season (для избежания дублирующих broadcasts)
+	lastBroadcastHash map[string]string
+
 	// Callback for periodic updates (called every N seconds with max requested limit per season)
 	OnPeriodicUpdate func(seasonLimits map[string]int)
+
+	// Configuration
+	broadcastInterval time.Duration
+	defaultLimit      int
 }
 
 // BroadcastMessage contains the season and leaderboard data to broadcast
@@ -42,13 +51,16 @@ type BroadcastMessage struct {
 }
 
 // NewHub creates a new Hub instance
-func NewHub(ctx context.Context) *Hub {
+func NewHub(ctx context.Context, broadcastInterval time.Duration, defaultLimit int) *Hub {
 	return &Hub{
-		BroadcastChan: make(chan *BroadcastMessage, 256),
-		Register:      make(chan *Client),
-		Unregister:    make(chan *Client),
-		Clients:       make(map[string]map[*Client]bool),
-		ctx:           ctx,
+		BroadcastChan:     make(chan *BroadcastMessage, 256),
+		Register:          make(chan *Client),
+		Unregister:        make(chan *Client),
+		Clients:           make(map[string]map[*Client]bool),
+		lastBroadcastHash: make(map[string]string),
+		ctx:               ctx,
+		broadcastInterval: broadcastInterval,
+		defaultLimit:      defaultLimit,
 	}
 }
 
@@ -56,9 +68,14 @@ func NewHub(ctx context.Context) *Hub {
 func (h *Hub) Run() {
 	log.Info().Msg("🔌 WebSocket Hub started")
 
-	// Ticker for periodic broadcasts (real-time updates every 3 seconds)
-	ticker := time.NewTicker(3 * time.Second)
+	// Ticker for periodic broadcasts
+	ticker := time.NewTicker(h.broadcastInterval)
 	defer ticker.Stop()
+
+	log.Info().
+		Dur("interval", h.broadcastInterval).
+		Int("default_limit", h.defaultLimit).
+		Msg("⚙️ Hub configuration loaded")
 
 	for {
 		select {
@@ -141,37 +158,50 @@ func (h *Hub) broadcastToSeason(message *BroadcastMessage) {
 		return
 	}
 
-	// Marshal message once
-	jsonData, err := json.Marshal(map[string]interface{}{
-		"type":        "leaderboard_update",
-		"season":      message.Season,
-		"leaderboard": message.Leaderboard,
-		"timestamp":   time.Now().Unix(),
-	})
-
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal broadcast message")
-		return
-	}
-
-	log.Info().
-		Str("season", message.Season).
-		Int("clients", clientCount).
-		Int("entries", len(message.Leaderboard.Entries)).
-		Int("json_size", len(jsonData)).
-		Msg("📡 Broadcasting leaderboard update to clients")
-
-	// Broadcast to all clients in parallel
+	// Broadcast to each client with their requested limit
 	sentCount := 0
 	failedCount := 0
+
 	for client := range clients {
+		// Filter entries based on client's requested limit
+		filteredEntries := message.Leaderboard.Entries
+		if len(filteredEntries) > client.RequestedLimit {
+			filteredEntries = filteredEntries[:client.RequestedLimit]
+		}
+
+		// Create custom leaderboard response for this client
+		clientLeaderboard := *message.Leaderboard // Copy struct
+		clientLeaderboard.Entries = filteredEntries
+
+		// Marshal message for this specific client
+		jsonData, err := json.Marshal(map[string]interface{}{
+			"type":        "leaderboard_update",
+			"season":      message.Season,
+			"leaderboard": clientLeaderboard,
+			"timestamp":   time.Now().Unix(),
+		})
+
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to marshal broadcast message")
+			continue
+		}
+
+		log.Info().
+			Str("season", message.Season).
+			Str("user_id", client.UserID.String()).
+			Int("requested_limit", client.RequestedLimit).
+			Int("total_entries", len(message.Leaderboard.Entries)).
+			Int("filtered_entries", len(filteredEntries)).
+			Int("json_size", len(jsonData)).
+			Msg("📡 Broadcasting leaderboard update to client")
+
 		select {
 		case client.Send <- jsonData:
 			sentCount++
 			log.Info().
 				Str("user_id", client.UserID.String()).
 				Str("season", client.Season).
-				Int("message_size", len(jsonData)).
+				Int("entries_sent", len(filteredEntries)).
 				Msg("✅ Message queued to client send channel")
 		default:
 			// Client's send channel is full, close it
@@ -245,7 +275,7 @@ func (h *Hub) triggerPeriodicUpdates() {
 	// Find max requested limit per season
 	for season, clients := range h.Clients {
 		if len(clients) > 0 {
-			maxLimit := 50 // Default
+			maxLimit := h.defaultLimit // Use default from config
 			for client := range clients {
 				if client.RequestedLimit > maxLimit {
 					maxLimit = client.RequestedLimit
@@ -295,6 +325,24 @@ func (h *Hub) closeAllClients() {
 	}
 
 	log.Info().Msg("All WebSocket clients closed")
+}
+
+// computeLeaderboardHash вычисляет SHA256 hash от leaderboard entries
+// Используется для определения, изменился ли leaderboard
+func (h *Hub) computeLeaderboardHash(leaderboard *leaderboardmodels.LeaderboardResponse) string {
+	if leaderboard == nil || len(leaderboard.Entries) == 0 {
+		return "empty"
+	}
+
+	// Сериализуем только entries (без timestamp и прочей метаданных)
+	data, err := json.Marshal(leaderboard.Entries)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to marshal leaderboard for hashing")
+		return "error"
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
 
 // GetStats returns current hub statistics

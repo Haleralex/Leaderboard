@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"leaderboard-service/internal/shared/config"
 	"leaderboard-service/internal/shared/middleware"
 	ws "leaderboard-service/internal/websocket"
 
@@ -23,18 +24,25 @@ var upgrader = websocket.Upgrader{
 type WebSocketHandler struct {
 	hub     *ws.Hub
 	jwt     *middleware.JWTMiddleware
+	config  *config.Config
 	service interface {
-		SendInitialSnapshot(season string, clientSend chan []byte)
+		SendInitialSnapshot(season string, requestedLimit int, clientSend chan []byte)
 	}
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
-func NewWebSocketHandler(hub *ws.Hub, jwt *middleware.JWTMiddleware, service interface {
-	SendInitialSnapshot(season string, clientSend chan []byte)
-}) *WebSocketHandler {
+func NewWebSocketHandler(
+	hub *ws.Hub,
+	jwt *middleware.JWTMiddleware,
+	cfg *config.Config,
+	service interface {
+		SendInitialSnapshot(season string, requestedLimit int, clientSend chan []byte)
+	},
+) *WebSocketHandler {
 	return &WebSocketHandler{
 		hub:     hub,
 		jwt:     jwt,
+		config:  cfg,
 		service: service,
 	}
 }
@@ -86,8 +94,14 @@ func (h *WebSocketHandler) HandleLeaderboard(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Create new client
-	client := ws.NewClient(h.hub, conn, userID, season)
+	// Create new client with configuration from config
+	clientConfig := ws.ClientConfig{
+		WriteWait:      h.config.GetWebSocketWriteWait(),
+		PongWait:       h.config.GetWebSocketPongWait(),
+		PingPeriod:     h.config.GetWebSocketPingPeriod(),
+		MaxMessageSize: h.config.WebSocket.MaxMessageSize,
+	}
+	client := ws.NewClient(h.hub, conn, userID, season, clientConfig)
 
 	// Register client with hub
 	h.hub.Register <- client
@@ -100,7 +114,7 @@ func (h *WebSocketHandler) HandleLeaderboard(w http.ResponseWriter, r *http.Requ
 
 	// Send initial leaderboard snapshot to client
 	if h.service != nil {
-		go h.service.SendInitialSnapshot(season, client.Send)
+		go h.service.SendInitialSnapshot(season, client.RequestedLimit, client.Send)
 	}
 
 	// Start client goroutines
