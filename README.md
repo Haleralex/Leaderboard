@@ -5,7 +5,7 @@ A production-ready, high-performance leaderboard microservice built with Go. Fea
 ## 📋 Features
 
 - **Score Management**: Submit and update player scores with anti-cheat rate limiting
-- **Real-time Updates**: WebSocket support for live leaderboard updates (3-second polling)
+- **Real-time Updates**: WebSocket support for live leaderboard updates (automatic push notifications)
 - **Leaderboard Queries**: Paginated, sorted leaderboards with DENSE_RANK() for accurate positioning
 - **Seasonal Support**: Multiple leaderboard seasons (e.g., global, weekly, monthly)
 - **High Performance**: 
@@ -24,10 +24,10 @@ A production-ready, high-performance leaderboard microservice built with Go. Fea
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Unity     │─────▶│ Leaderboard  │─────▶│  PostgreSQL  │
-│   Client    │◀─────│   Service    │      │  (Primary)   │
-└─────────────┘ WS   │   (Go/Chi)   │      └──────────────┘
-                     │              │              ▲
+│   Client    │─────▶│ Leaderboard  │─────▶│  PostgreSQL  │
+│ Unity/Web/  │◀─────│   Service    │      │  (Primary)   │
+│   Mobile    │ WS   │   (Go/Chi)   │      └──────────────┘
+└─────────────┘      │              │              ▲
                      │  Multiple    │              │
                      │  Instances   │         DENSE_RANK()
                      │              │              │
@@ -67,7 +67,7 @@ This project implements Clean Architecture with proven design patterns:
 - **Unit of Work** - Transaction management ([UNIT_OF_WORK.md](UNIT_OF_WORK.md))
 - **Hub Pattern** - WebSocket connection management with per-season subscriptions
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and [CLEAN_ARCHITECTURE_5_5.md](CLEAN_ARCHITECTURE_5_5.md) for details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 ## 🚀 Quick Start
 
@@ -88,7 +88,7 @@ cd leaderboard-service
 cp .env.example .env
 
 # Edit .env with your credentials
-# Required: DATABASE_URL, JWT_SECRET
+# Required: DATABASE_URL, REDIS_ADDR, JWT_SECRET
 ```
 
 ### 2. Database Setup
@@ -291,11 +291,19 @@ Connect to receive real-time leaderboard updates when scores are submitted.
 ```json
 {
   "type": "leaderboard_update",
-  "data": {
-    "entries": [...],
-    "total_count": 150,
-    "season": "global"
-  }
+  "season": "global",
+  "leaderboard": {
+    "entries": [
+      {
+        "rank": 1,
+        "user_name": "Player1",
+        "score": 1000
+      }
+    ],
+    "total_entries": 150,
+    "has_next": true
+  },
+  "timestamp": 1704153600000
 }
 ```
 
@@ -338,15 +346,6 @@ go run cmd/seed/main.go 1000  # Creates 1000 test users
 go run cmd/simulator/main.go  # Simulates real-time score submissions
 ```
 
-## 🔧 Configuration
-
-Environment variables (`.env` file):
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `PORT` | Server port | 8080 | No |
-| `ENV` | Environment (development/production) | development | No |
-| `DATABASE_URL` | PostgreSQL connection string | - | **Yes** |
 ## 🔧 Configuration
 
 Environment variables (`.env` file):
