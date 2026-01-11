@@ -79,15 +79,15 @@ func main() {
 	baseScoreRepo := leaderboardrepo.NewPostgresScoreRepository(db)
 
 	// Wrap repositories with decorators (Decorator Pattern)
-	// Order: base → cached → logged (outermost)
+	// Order: base → cached (Redis for scores, SimpleCache for users) → logged (outermost)
 	userRepo := decorators.NewLoggedUserRepository(
 		decorators.NewCachedUserRepository(baseUserRepo, cache),
 	)
 	scoreRepo := decorators.NewLoggedScoreRepository(
-		decorators.NewCachedScoreRepository(baseScoreRepo, cache),
+		decorators.NewRedisCachedScoreRepository(baseScoreRepo, redis), // Use Redis for shared cache between containers
 	)
 
-	log.Info().Msg("✅ Repositories initialized with caching and logging decorators")
+	log.Info().Msg("✅ Repositories initialized with Redis caching (scores) and logging decorators")
 
 	// Initialize services with decorated repositories
 	authService := authservice.NewAuthService(userRepo, jwtMiddleware, cfg)
@@ -172,10 +172,10 @@ func setupRouter(
 			r.Post("/auth/login", authHandler.Login)
 		})
 
-		// Protected leaderboard endpoints (JWT DISABLED FOR TESTING)
+		// Protected leaderboard endpoints
 		r.Group(func(r chi.Router) {
-			// r.Use(jwtMiddleware.Authenticate) // Require JWT - DISABLED FOR TESTING
-			r.Use(rateLimiter.Limit) // Apply rate limiting
+			r.Use(jwtMiddleware.Authenticate) // Require JWT
+			r.Use(rateLimiter.Limit)          // Apply rate limiting
 
 			// Leaderboard operations
 			r.Post("/submit-score", leaderboardHandler.SubmitScore)

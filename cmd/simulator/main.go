@@ -66,12 +66,12 @@ func main() {
 	// Create cache for decorators
 	cache := decorators.NewSimpleCache()
 
-	// Initialize repositories with decorators
+	// Initialize repositories with decorators (use Redis for scores to share cache with API)
 	baseUserRepo := authrepo.NewPostgresUserRepository(db)
 	baseScoreRepo := leaderboardrepo.NewPostgresScoreRepository(db)
 
 	userRepo := decorators.NewCachedUserRepository(baseUserRepo, cache)
-	scoreRepo := decorators.NewCachedScoreRepository(baseScoreRepo, cache)
+	scoreRepo := decorators.NewRedisCachedScoreRepository(baseScoreRepo, redis) // Use Redis for shared cache
 
 	// Initialize services
 	leaderboardService := leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
