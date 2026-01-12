@@ -57,17 +57,15 @@ A production-ready, high-performance leaderboard microservice built with Go. Fea
 
 This project implements Clean Architecture with proven design patterns:
 
-- **Repository Pattern** - Data access abstraction ([REPOSITORY_PATTERN.md](REPOSITORY_PATTERN.md))
-- **Specification Pattern** - Composable query logic ([SPECIFICATION_PATTERN.md](SPECIFICATION_PATTERN.md))
-- **Decorator Pattern** - Caching and logging wrappers ([DECORATOR_IMPLEMENTATION.md](DECORATOR_IMPLEMENTATION.md))
+- **Repository Pattern** - Data access abstraction
+- **Specification Pattern** - Composable query logic
+- **Decorator Pattern** - Caching and logging wrappers
   - `RedisCachedScoreRepository` - Redis-based distributed cache with SCAN pattern invalidation
   - `LoggedScoreRepository` - Operation logging
-- **Strategy Pattern** - Pluggable ranking algorithms ([STRATEGY_PATTERN.md](STRATEGY_PATTERN.md))
-- **Factory Pattern** - Dependency injection ([FACTORY_PATTERN.md](FACTORY_PATTERN.md))
-- **Unit of Work** - Transaction management ([UNIT_OF_WORK.md](UNIT_OF_WORK.md))
+- **Strategy Pattern** - Pluggable ranking algorithms
+- **Factory Pattern** - Dependency injection
+- **Unit of Work** - Transaction management
 - **Hub Pattern** - WebSocket connection management with per-season subscriptions
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 ## 🚀 Quick Start
 
@@ -316,8 +314,6 @@ ws.onmessage = (event) => {
   console.log('Leaderboard update:', data);
 };
 ```
-
-See [WEBSOCKET.md](WEBSOCKET.md) for detailed documentation.
 
 ## 🧪 Testing
 
