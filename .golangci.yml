@@ -33,10 +33,6 @@ linters-settings:
   misspell:
     locale: US
 
-output:
-  formats:
-    - format: github-actions
-
 issues:
   exclude-use-default: false
   max-issues-per-linter: 0
