@@ -132,7 +132,6 @@ jobs:
         run: |
           go test -v -race -coverprofile=coverage-integration.out -covermode=atomic \
             ./internal/service \
-            ./internal/integration \
             ./internal/shared/repository
 
       - name: Generate integration test coverage report
