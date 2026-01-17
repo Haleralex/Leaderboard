@@ -61,7 +61,3 @@ issues:
         - lll
       source: "^//go:generate "
 
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
