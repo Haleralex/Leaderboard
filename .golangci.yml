@@ -1,0 +1,66 @@
+# GolangCI-Lint configuration
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - misspell
+    - gocyclo
+    - goimports
+    - gosec
+    - unparam
+    - unconvert
+    - dupl
+    - gocritic
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  
+  dupl:
+    threshold: 100
+  
+  govet:
+    check-shadowing: true
+  
+  misspell:
+    locale: US
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+    
+    # Ignore shadowing of err
+    - linters:
+        - govet
+      text: 'shadow: declaration of "err"'
+    
+    # Ignore long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
