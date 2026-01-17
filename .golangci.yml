@@ -30,11 +30,12 @@ linters-settings:
   dupl:
     threshold: 100
   
-  govet:
-    check-shadowing: true
-  
   misspell:
     locale: US
+
+output:
+  formats:
+    - format: github-actions
 
 issues:
   exclude-use-default: false
