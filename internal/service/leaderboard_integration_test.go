@@ -32,13 +32,9 @@ func newTestLeaderboardService(db *database.PostgresDB, redis *database.RedisCli
 	return leaderboardservice.NewLeaderboardService(scoreRepo, userRepo, redis, cfg)
 }
 
-// TestIntegrationGetLeaderboardWithRedis tests leaderboard retrieval with Redis cache
-func TestIntegrationGetLeaderboardWithRedis(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-
-	cfg := &config.Config{
+// Helper function to create test config
+func newTestConfig() *config.Config {
+	return &config.Config{
 		Database: config.DatabaseConfig{
 			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
 			MaxConns: 25,
@@ -49,7 +45,20 @@ func TestIntegrationGetLeaderboardWithRedis(t *testing.T) {
 			Password: "",
 			DB:       0,
 		},
+		Validation: config.ValidationConfig{
+			MaxScore: 1000000,
+			MinScore: 0,
+		},
 	}
+}
+
+// TestIntegrationGetLeaderboardWithRedis tests leaderboard retrieval with Redis cache
+func TestIntegrationGetLeaderboardWithRedis(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err, "Failed to connect to PostgreSQL")
@@ -98,13 +107,7 @@ func TestIntegrationGetLeaderboardNoRedis(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	cfg := &config.Config{
-		Database: config.DatabaseConfig{
-			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
-			MaxConns: 25,
-			MinConns: 5,
-		},
-	}
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err)
@@ -132,18 +135,7 @@ func TestIntegrationSubmitScoreAndRetrieve(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	cfg := &config.Config{
-		Database: config.DatabaseConfig{
-			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
-			MaxConns: 25,
-			MinConns: 5,
-		},
-		Redis: config.RedisConfig{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
-		},
-	}
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err)
@@ -156,8 +148,12 @@ func TestIntegrationSubmitScoreAndRetrieve(t *testing.T) {
 	service := newTestLeaderboardService(db, redis, cfg)
 	ctx := context.Background()
 
-	// Submit a score
+	// Create test user first
 	userID := uuid.New()
+	db.DB.Exec("INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)",
+		userID, "Test User", "test@example.com", "hashed")
+
+	// Submit a score
 	testScore := int64(99999)
 
 	req := &leaderboardmodels.SubmitScoreRequest{
@@ -187,7 +183,8 @@ func TestIntegrationSubmitScoreAndRetrieve(t *testing.T) {
 	t.Logf("Rank retrieval time: %v", rankTime)
 
 	// Clean up test data
-	db.DB.Exec("DELETE FROM scores WHERE user_id = ? AND season = ?", userID, "test_season")
+	db.DB.Exec("DELETE FROM scores WHERE user_id = ?", userID)
+	db.DB.Exec("DELETE FROM users WHERE id = ?", userID)
 }
 
 // TestIntegrationConcurrentAccess tests concurrent reads and writes
@@ -196,18 +193,7 @@ func TestIntegrationConcurrentAccess(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	cfg := &config.Config{
-		Database: config.DatabaseConfig{
-			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
-			MaxConns: 25,
-			MinConns: 5,
-		},
-		Redis: config.RedisConfig{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
-		},
-	}
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err)
@@ -257,18 +243,7 @@ func TestIntegrationRedisCacheInvalidation(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	cfg := &config.Config{
-		Database: config.DatabaseConfig{
-			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
-			MaxConns: 25,
-			MinConns: 5,
-		},
-		Redis: config.RedisConfig{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
-		},
-	}
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err)
@@ -283,6 +258,10 @@ func TestIntegrationRedisCacheInvalidation(t *testing.T) {
 
 	season := "cache_test"
 	userID := uuid.New()
+
+	// Create test user first
+	db.DB.Exec("INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)",
+		userID, "Test User", "test@example.com", "hashed")
 
 	// Submit initial score
 	req1 := &leaderboardmodels.SubmitScoreRequest{
@@ -324,7 +303,8 @@ func TestIntegrationRedisCacheInvalidation(t *testing.T) {
 	t.Logf("Updated leaderboard entries: %d", len(result2.Entries))
 
 	// Clean up
-	db.DB.Exec("DELETE FROM scores WHERE user_id = ? AND season = ?", userID, season)
+	db.DB.Exec("DELETE FROM scores WHERE user_id = ?", userID)
+	db.DB.Exec("DELETE FROM users WHERE id = ?", userID)
 }
 
 // TestIntegrationPagination tests pagination correctness
@@ -333,13 +313,7 @@ func TestIntegrationPagination(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	cfg := &config.Config{
-		Database: config.DatabaseConfig{
-			URL:      "postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable",
-			MaxConns: 25,
-			MinConns: 5,
-		},
-	}
+	cfg := newTestConfig()
 
 	db, err := database.NewPostgresDB(cfg)
 	require.NoError(t, err)
