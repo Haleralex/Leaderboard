@@ -8,8 +8,8 @@ import (
 	"time"
 
 	authmodels "leaderboard-service/internal/auth/models"
-	sharedmodels "leaderboard-service/internal/shared/models"
 	"leaderboard-service/internal/shared/config"
+	sharedmodels "leaderboard-service/internal/shared/models"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -76,7 +76,6 @@ func (m *JWTMiddleware) validateToken(tokenString string) (*authmodels.AuthClaim
 		}
 		return []byte(m.secret), nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +138,7 @@ func GetUserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 func respondError(w http.ResponseWriter, message string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(sharedmodels.ErrorResponse{
+	_ = json.NewEncoder(w).Encode(sharedmodels.ErrorResponse{
 		Error:   http.StatusText(code),
 		Message: message,
 		Code:    code,

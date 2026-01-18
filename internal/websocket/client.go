@@ -59,13 +59,13 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, season string, 
 func (c *Client) ReadPump() {
 	defer func() {
 		c.Hub.Unregister <- c
-		c.Conn.Close()
+		_ = c.Conn.Close()
 	}()
 
 	c.Conn.SetReadLimit(c.config.MaxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+	_ = c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+		_ = c.Conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
 		return nil
 	})
 
@@ -115,16 +115,16 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(c.config.PingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.Conn.Close()
+		_ = c.Conn.Close()
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
 			if !ok {
 				// The hub closed the channel
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
@@ -139,13 +139,13 @@ func (c *Client) WritePump() {
 				log.Error().Err(err).Msg("❌ WritePump: Failed to get NextWriter")
 				return
 			}
-			w.Write(message)
+			_, _ = w.Write(message)
 
 			// Add queued messages to the current WebSocket message
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Send)
+				_, _ = w.Write([]byte{'\n'})
+				_, _ = w.Write(<-c.Send)
 			}
 
 			if err := w.Close(); err != nil {
@@ -156,7 +156,7 @@ func (c *Client) WritePump() {
 			log.Info().Msg("✅ WritePump: Message successfully written to WebSocket")
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

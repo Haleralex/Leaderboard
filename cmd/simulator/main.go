@@ -52,7 +52,11 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to PostgreSQL")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close database")
+		}
+	}()
 
 	// Initialize Redis (optional)
 	redis, err := database.NewRedisClient(cfg)
@@ -60,7 +64,11 @@ func main() {
 		log.Warn().Err(err).Msg("Redis not available, running without cache")
 		redis = nil
 	} else {
-		defer redis.Close()
+		defer func() {
+			if err := redis.Close(); err != nil {
+				log.Error().Err(err).Msg("Failed to close Redis")
+			}
+		}()
 	}
 
 	// Create cache for decorators

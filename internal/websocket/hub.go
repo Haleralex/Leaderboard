@@ -236,7 +236,6 @@ func (h *Hub) broadcastToSeason(message *BroadcastMessage) {
 			"leaderboard": clientLeaderboard,
 			"timestamp":   time.Now().Unix(),
 		})
-
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to marshal broadcast message")
 			continue

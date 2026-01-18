@@ -44,7 +44,11 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to PostgreSQL")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close database")
+		}
+	}()
 
 	// Initialize Redis (optional for testing)
 	redis, err := database.NewRedisClient(cfg)
@@ -52,7 +56,11 @@ func main() {
 		log.Warn().Err(err).Msg("Redis not available, running without cache")
 		redis = nil
 	} else {
-		defer redis.Close()
+		defer func() {
+			if err := redis.Close(); err != nil {
+				log.Error().Err(err).Msg("Failed to close Redis")
+			}
+		}()
 	}
 
 	// Initialize middleware
@@ -202,7 +210,7 @@ func setupRouter(
 	// 404 handler
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"Not Found","message":"endpoint not found","code":404}`))
+		_, _ = w.Write([]byte(`{"error":"Not Found","message":"endpoint not found","code":404}`))
 	})
 
 	return r

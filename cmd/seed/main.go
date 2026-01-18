@@ -45,7 +45,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Failed to close database: %v", err)
+		}
+	}()
 
 	if err := db.Ping(); err != nil {
 		log.Fatal("Failed to connect:", err)
@@ -109,7 +113,7 @@ func seedData(db *sql.DB, numUsers int) error {
 				name, email, passwordHash,
 			).Scan(&userID)
 			if err != nil {
-				tx.Rollback()
+				_ = tx.Rollback()
 				// Skip duplicate email
 				if err.Error() == "pq: duplicate key value violates unique constraint \"users_email_key\"" {
 					continue
@@ -120,7 +124,7 @@ func seedData(db *sql.DB, numUsers int) error {
 			// Insert scores for multiple seasons (realistic distribution)
 			for _, season := range seasons {
 				// Use normal-like distribution for scores (most players mid-range, few at extremes)
-				score := int64(gaussianScore(rng, 0, 500000, 1000000))
+				score := gaussianScore(rng, 0, 500000, 1000000)
 				if score < 0 {
 					score = 0
 				}
@@ -133,7 +137,7 @@ func seedData(db *sql.DB, numUsers int) error {
 				if err != nil {
 					// Ignore unique constraint violations
 					if err.Error() != "pq: duplicate key value violates unique constraint \"unique_user_season\"" {
-						tx.Rollback()
+						_ = tx.Rollback()
 						return err
 					}
 				}

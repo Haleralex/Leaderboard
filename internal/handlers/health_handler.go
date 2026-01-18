@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"leaderboard-service/internal/shared/models"
 	"leaderboard-service/internal/shared/database"
+	"leaderboard-service/internal/shared/models"
 )
 
 // HealthHandler handles health check endpoints

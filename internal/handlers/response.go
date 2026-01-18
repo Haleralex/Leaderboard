@@ -20,7 +20,7 @@ func respondJSON(w http.ResponseWriter, data interface{}, statusCode int) {
 func respondError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(models.ErrorResponse{
+	_ = json.NewEncoder(w).Encode(models.ErrorResponse{
 		Error:   http.StatusText(statusCode),
 		Message: message,
 		Code:    statusCode,

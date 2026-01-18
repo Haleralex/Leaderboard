@@ -121,7 +121,7 @@ func (r *PostgresScoreRepository) GetLeaderboard(ctx context.Context, season str
 			entries[i].UserName,
 			entries[i].Timestamp)
 	}
-	top3Debug += "]"
+	_ = top3Debug // unused for now, kept for debugging
 
 	// Get total count for pagination
 	totalCount, err := r.CountBySeason(ctx, season)

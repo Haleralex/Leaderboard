@@ -187,13 +187,11 @@ func (f *CustomRepositoryFactory) CreateScoreRepository() repository.ScoreReposi
 
 // CreateUnitOfWork создает Unit of Work
 func (f *CustomRepositoryFactory) CreateUnitOfWork() repository.UnitOfWork {
-	userFactory := func(db *database.PostgresDB) repository.UserRepository {
-		return authrepository.NewPostgresUserRepository(db)
-	}
-	scoreFactory := func(db *database.PostgresDB) repository.ScoreRepository {
-		return leaderboardrepository.NewPostgresScoreRepository(db)
-	}
-	return repository.NewUnitOfWork(f.config.DB, userFactory, scoreFactory)
+	return repository.NewUnitOfWork(
+		f.config.DB,
+		authrepository.NewPostgresUserRepository,
+		leaderboardrepository.NewPostgresScoreRepository,
+	)
 }
 
 // RepositoryFactoryBuilder builder для фабрики репозиториев (fluent interface)

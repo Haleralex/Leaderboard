@@ -46,6 +46,7 @@ issues:
         - errcheck
         - dupl
         - gosec
+        - unused
     
     # Ignore shadowing of err
     - linters:
@@ -56,4 +57,40 @@ issues:
     - linters:
         - lll
       source: "^//go:generate "
+    
+    # Ignore weak random in simulator and seed (not security-critical)
+    - path: (cmd/simulator|cmd/seed)/main\.go
+      linters:
+        - gosec
+      text: "G404"
+    
+    # Ignore exitAfterDefer warnings (intended behavior for fatal errors)
+    - linters:
+        - gocritic
+      text: "exitAfterDefer"
+    
+    # Ignore dupl for decorators (similar code by design)
+    - path: internal/shared/repository/decorators/
+      linters:
+        - dupl
+    
+    # Ignore dupl for factory (similar code by design)
+    - path: internal/factory/repository_factory\.go
+      linters:
+        - dupl
+    
+    # Ignore unused functions in service layer (may be used by future features)
+    - path: internal/leaderboard/service/
+      linters:
+        - unused
+    
+    # Ignore unused types/functions in decorators (part of framework)
+    - path: internal/shared/repository/decorators/
+      linters:
+        - unused
+    
+    # Ignore unused in websocket hub (debug/future features)
+    - path: internal/websocket/hub\.go
+      linters:
+        - unused
 

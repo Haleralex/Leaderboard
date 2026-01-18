@@ -1,8 +1,8 @@
 package factory
 
 import (
-	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
 	authmodels "leaderboard-service/internal/auth/models"
+	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
 	"leaderboard-service/internal/shared/repository"
 
 	"github.com/google/uuid"
@@ -115,11 +115,12 @@ func (b *LeaderboardSpecBuilder) Build() repository.Specification[leaderboardmod
 	}
 
 	// Диапазон счетов
-	if b.minScore != nil && b.maxScore != nil {
+	switch {
+	case b.minScore != nil && b.maxScore != nil:
 		specs = append(specs, repository.NewScoreRangeSpec(*b.minScore, *b.maxScore))
-	} else if b.minScore != nil {
+	case b.minScore != nil:
 		specs = append(specs, repository.NewScoreMinValueSpec(*b.minScore))
-	} else if b.maxScore != nil {
+	case b.maxScore != nil:
 		specs = append(specs, repository.NewScoreMaxValueSpec(*b.maxScore))
 	}
 

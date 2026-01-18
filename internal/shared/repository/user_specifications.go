@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	authmodels "leaderboard-service/internal/auth/models"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )

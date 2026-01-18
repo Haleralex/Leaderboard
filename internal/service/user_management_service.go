@@ -73,7 +73,6 @@ func (s *UserManagementService) RegisterUserWithInitialScore(
 		// Both operations succeeded - will auto-commit
 		return nil
 	})
-
 	if err != nil {
 		return nil, nil, err
 	}

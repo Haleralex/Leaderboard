@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
 	authmodels "leaderboard-service/internal/auth/models"
+	leaderboardmodels "leaderboard-service/internal/leaderboard/models"
 	"leaderboard-service/internal/shared/repository"
 
 	"github.com/google/uuid"

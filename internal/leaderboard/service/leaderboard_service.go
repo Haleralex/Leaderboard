@@ -281,7 +281,6 @@ func (s *LeaderboardService) updateRedisCache(ctx context.Context, userID uuid.U
 		Score:  float64(score),
 		Member: userID.String(),
 	}).Err()
-
 	if err != nil {
 		log.Warn().Err(err).Str("key", key).Msg("Failed to update Redis cache")
 		return
@@ -512,7 +511,6 @@ func (s *LeaderboardService) SendInitialSnapshot(season string, requestedLimit i
 		"leaderboard": leaderboard,
 		"timestamp":   time.Now().Unix(),
 	})
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to marshal initial snapshot")
 		return
