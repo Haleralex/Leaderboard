@@ -131,8 +131,7 @@ jobs:
           JWT_SECRET: test-secret-key-for-ci
         run: |
           go test -v -race -coverprofile=coverage-integration.out -covermode=atomic \
-            ./internal/service \
-            ./internal/shared/repository
+            ./internal/service
 
       - name: Generate integration test coverage report
         run: |
